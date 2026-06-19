@@ -142,23 +142,6 @@ transit-grant-finder/
 ├── requirements.txt       # Python dependencies
 └── README.md              # This file
 ```
-
-## 🧪 Testing the Cite-or-Skip Rule
-
-The app's most important behavior is refusing to invent facts. The test suite verifies:
-
-- Missing facts are omitted from the Claude context
-- Empty or None values are filtered out
-- `[AGENCY TO PROVIDE:` placeholders are never injected
-- Claude can draft with only partial data
-- The narrative never contains made-up numbers
-
-Run the tests with:
-
-```bash
-pytest tests/ -v
-```
-
 ## 📊 Grant Data
 
 The app uses three simplified real grant programs:
@@ -169,43 +152,6 @@ The app uses three simplified real grant programs:
 | WA Consolidated Grant | WSDOT | Rural/Small-urban (WA only) | Medium-High |
 | Section 5312 / EMI | FTA | All areas | High (pilots/automation) |
 
-## 🛠️ Tech Stack
-
-- **Frontend & Backend:** [Streamlit](https://streamlit.io/)
-- **LLM:** [Anthropic Claude](https://www.anthropic.com/) API with prompt caching
-- **Export:** [python-docx](https://python-docx.readthedocs.io/)
-- **Testing:** [pytest](https://docs.pytest.org/)
-- **Deployment:** [Streamlit Community Cloud](https://streamlit.io/cloud)
-
-## 🗓️ What's Next?
-
-With another week, I would add:
-
-- User accounts and draft persistence
-- Narrative section selector (Need, Description, Budget, Outcomes)
-- Edit-in-place for drafts
-- PDF export
-- More grant programs (20-30 actual federal/state grants)
-- Collaboration features (share drafts with colleagues)
-
-## 💭 Development Philosophy
-
-This project was built with the following principles:
-
-1. **Ship a working end-to-end flow** – partial polish is worse than complete function
-2. **Cite-or-skip discipline** – never invent facts, even if it makes the draft weaker
-3. **Transparent scoring** – users should understand why a grant was recommended
-4. **AI-assisted, human-reviewed** – the app drafts, but the agency owns the final document
-
 ## 📄 License
 
 MIT License – see [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-Built for the AI Dev Lab / IT Curves transit grant project.  
-Uses the Anthropic Claude API for narrative generation.
-
----
-
-*AI-assisted. Human-reviewed. Accountable to transit agencies.*
