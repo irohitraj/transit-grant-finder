@@ -26,12 +26,12 @@ Small and rural transit agencies want to adopt AI but lack:
 - Grant writers to fund these initiatives
 - Time to research complex federal/state grant programs
 
-This app takes them from idea to  a **drafted, ready-to-review grant application** in minutes, not weeks.
+This app takes them from idea to a **drafted, ready-to-review grant application** in minutes, not weeks.
 
 ## ✨ Features
 
 - **4-Step Flow** – Agency Profile → Grant Matching → Narrative Drafting → Export
-- **Cite-or-Skip Enforcement** – Never invents facts. Uses placeholders for missing data.
+- **Cite-or-Skip Enforcement** – Never invents facts. Silently omits missing data rather than using placeholders.
 - **Deterministic Grant Matching** – Transparent scoring with clear eligibility reasons
 - **AI-Assisted Drafting** – Uses Claude API with prompt caching for speed
 - **Export Options** – Download as Markdown (.md) or Word (.docx)
@@ -86,7 +86,7 @@ Users fill in a form capturing:
 - Agency basics (name, state, service area type)
 - Size metrics (ridership, fleet size, staff count)
 - Project goals (AI training, pilot, or automation)
-- Optional details (project description, prior grants, budget)
+- Optional details (service area description, project description, prior grants, budget match)
 
 ### Step 2: Grant Matching
 
@@ -102,7 +102,7 @@ Scoring is deterministic and transparent – users see exactly why each grant re
 ### Step 3: AI-Assisted Drafting
 
 - **Cite-or-skip rule:** Only agency-provided facts are included in the context
-- Missing facts are **silently omitted** – no placeholders are sent to Claude
+- Missing facts are **omitted** – no placeholders are sent to Claude
 - Claude generates a ~300-500 word narrative section
 - Prompt caching reduces latency on repeated drafts
 
@@ -142,6 +142,7 @@ transit-grant-finder/
 ├── requirements.txt       # Python dependencies
 └── README.md              # This file
 ```
+
 ## 📊 Grant Data
 
 The app uses three simplified real grant programs:
