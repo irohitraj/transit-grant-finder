@@ -26,7 +26,7 @@ Small and rural transit agencies want to adopt AI but lack:
 - Grant writers to fund these initiatives
 - Time to research complex federal/state grant programs
 
-This app takes them from **"we want to fund some AI"** to a **drafted, ready-to-review grant application** in minutes instead of weeks.
+This app takes them from idea to  a **drafted, ready-to-review grant application** in minutes, not weeks.
 
 ## ✨ Features
 
