@@ -11,10 +11,10 @@ from typing import Any, Dict, List
 from data.grants import GRANTS, GrantProgram
 
 # Score weights — must sum to 100 for full marks.
-WEIGHT_AREA = 30
-WEIGHT_STATE = 20
-WEIGHT_PROJECT_TYPE = 30
-WEIGHT_AI_FIT = 20
+WEIGHT_AREA = 25
+WEIGHT_STATE = 25
+WEIGHT_PROJECT_TYPE = 25
+WEIGHT_AI_FIT = 25
 
 # Maps user-facing project type selections to grant fund_type values.
 PROJECT_TYPE_TO_FUND_TYPES: Dict[str, List[str]] = {

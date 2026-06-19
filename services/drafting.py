@@ -21,26 +21,28 @@ load_dotenv()
 SYSTEM_PROMPT = """You are an expert grant writer helping small and rural public transit agencies.
 Your job is to draft one narrative section for a federal or state transit grant application.
 
-CRITICAL RULE — CITE OR SKIP:
-You must never invent, estimate, or assume any fact about the agency.
-This includes: ridership numbers, fleet size, staff count, budget figures,
-prior grant awards, service area descriptions, outcomes, or any other agency-specific data.
+CRITICAL RULE — USE PROVIDED FACTS, NEVER INVENT:
+Every specific fact you write must come directly from the agency context provided to you.
+This means:
+- If annual ridership, fleet size, staff count, budget, or any other figure is provided,
+  you MUST weave those exact numbers into the narrative naturally and prominently.
+- You must never invent, estimate, or assume a value that is not in the agency context.
 
-If a piece of information is marked as [AGENCY TO PROVIDE: ...], you must:
-1. Keep that exact placeholder text in your draft, unchanged and verbatim.
-2. Write the surrounding narrative so the placeholder fits naturally into a complete sentence.
-3. Never replace, rephrase, or omit the placeholder.
+If a piece of information is not present in the agency context:
+- Do not mention that topic at all.
+- Do not use a placeholder, bracket, or blank line for it.
+- Do not allude to it or hint that it exists.
+- Simply write a complete, coherent narrative using only the facts you have been given.
 
-If a topic (such as prior grants or local match) is not present in the agency information
-provided to you, do not mention it at all. Do not invent it, do not add a placeholder for it,
-and do not allude to it. Only write about topics that are present in the context you are given.
+When facts ARE present, use them. Concrete numbers (ridership figures, fleet size, staff count,
+budget amounts) strengthen a grant application — include every number you are given.
 
 Write in a clear, professional tone appropriate for a federal grant application.
 Use plain language — the reader may be a non-technical transit program officer.
 Length: approximately 300–500 words.
 Do not include a title or section heading — just the narrative body.
 Do not use contingency language such as "if approved" or "we hope to".
-Write as if the project is real and proceeding — the placeholders will be filled in later."""
+Write as if the project is real and proceeding."""
 
 
 def _build_user_message(context: Dict[str, str], grant_name: str) -> str:
@@ -99,7 +101,7 @@ def draft_narrative(
     user_message = _build_user_message(context, grant_name)
 
     response = client.messages.create(
-        model="claude-opus-4-5",
+        model="claude-sonnet-4-6",
         max_tokens=1024,
         system=[
             {

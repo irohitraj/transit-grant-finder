@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from services.drafting import draft_narrative, _build_user_message, SYSTEM_PROMPT
-from services.provenance import build_context, REQUIRED_FACTS
+from services.provenance import build_context, ALL_FACTS
 
 
 # ---------------------------------------------------------------------------
@@ -13,12 +13,13 @@ from services.provenance import build_context, REQUIRED_FACTS
 
 @pytest.fixture
 def full_context():
-    return build_context({k: f"test value for {k}" for k in REQUIRED_FACTS})
+    return build_context({k: f"test value for {k}" for k in ALL_FACTS})
 
 
 @pytest.fixture
-def placeholder_context():
-    return build_context({k: None for k in REQUIRED_FACTS})
+def sparse_context():
+    """Context with only a few facts — simulates a partially filled form."""
+    return build_context({"agency_name": "Valley Transit", "fleet_size": "12"})
 
 
 def _make_mock_response(text: str, cache_read: int = 0):
@@ -78,16 +79,18 @@ class TestDraftNarrative:
         assert len(result["narrative"]) > 0
 
     @patch("services.drafting.anthropic.Anthropic")
-    def test_placeholders_preserved_in_narrative(self, mock_anthropic_class, placeholder_context):
-        """Mock returns a narrative that includes a placeholder — verify it comes through."""
-        placeholder_text = "We serve [AGENCY TO PROVIDE: annual ridership] riders annually."
+    def test_sparse_context_returns_non_empty_narrative(self, mock_anthropic_class, sparse_context):
+        """Partial context (only a few facts) still produces a valid narrative."""
         mock_client = MagicMock()
-        mock_client.messages.create.return_value = _make_mock_response(placeholder_text)
+        mock_client.messages.create.return_value = _make_mock_response(
+            "Valley Transit operates 12 vehicles to serve its rural community."
+        )
         mock_anthropic_class.return_value = mock_client
 
-        result = draft_narrative(placeholder_context, "Section 5311", api_key="fake-key")
+        result = draft_narrative(sparse_context, "Section 5311", api_key="fake-key")
 
-        assert "[AGENCY TO PROVIDE: annual ridership]" in result["narrative"]
+        assert "Valley Transit" in result["narrative"]
+        assert "[AGENCY TO PROVIDE:" not in result["narrative"]
 
     @patch("services.drafting.anthropic.Anthropic")
     def test_cache_hit_detected(self, mock_anthropic_class, full_context):

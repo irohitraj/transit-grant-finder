@@ -11,7 +11,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from services.matcher import rank_grants
-from services.provenance import build_context, has_placeholders, list_missing_facts
+from services.provenance import build_context, list_missing_facts
 from services.drafting import draft_narrative
 from services.export import export_markdown, export_docx
 
@@ -52,39 +52,125 @@ st.markdown(
     .narrative-box p:last-child {
         margin-bottom: 0;
     }
-    /* Placeholder highlight — amber works in both light and dark themes */
-    .narrative-box mark {
-        background-color: #f5a623;
-        color: #1a1a1a;
+    /* Green — real value the agency provided in the form */
+    .narrative-box .user-data {
+        background-color: rgba(34, 197, 94, 0.22);
         border-radius: 3px;
-        padding: 1px 4px;
-        font-weight: 600;
-        font-style: normal;
+        padding: 1px 3px;
+        font-weight: 500;
+    }
+    /* Hide the "Press Enter to apply" hint on number inputs inside forms */
+    [data-testid="InputInstructions"] {
+        display: none !important;
+    }
+    /* Legend row beneath the box */
+    .narrative-legend {
+        display: flex;
+        gap: 1.4rem;
+        margin-top: 0.5rem;
+        font-size: 0.8rem;
+        color: var(--text-color);
+        opacity: 0.75;
+    }
+    .legend-swatch {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        margin-right: 4px;
+        vertical-align: middle;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
+# Keys whose values should be highlighted green when they appear verbatim in the draft.
+# Excludes project_description (too long — would paint most of the text) and
+# routing keys like area_type / state that don't appear verbatim in narratives.
+_HIGHLIGHT_FACT_KEYS = frozenset({
+    "agency_name",
+    "annual_ridership",
+    "fleet_size",
+    "staff_count",
+    "service_area",
+    "prior_grants",
+    "budget_match",
+})
 
-def render_narrative(text: str) -> None:
-    """Render a narrative string in a theme-aware box with highlighted placeholders."""
-    # Escape HTML first so Claude output can't inject markup
+# Numeric values (digits, commas, dollar signs, periods) are meaningful even
+# when short — "8 staff" or "12 vehicles" are specific agency facts.
+# Text values need a higher bar to avoid false matches on common words.
+_NUMERIC_RE = re.compile(r'^[\d,.$\s]+$')
+
+
+def _min_len_for(value: str) -> int:
+    return 1 if _NUMERIC_RE.match(value.strip()) else 4
+
+
+def _make_highlight_pattern(escaped_val: str) -> re.Pattern:
+    """Word-boundary pattern for short values; substring pattern for long ones."""
+    if len(escaped_val) <= 5:
+        return re.compile(r'\b' + re.escape(escaped_val) + r'\b', re.IGNORECASE)
+    return re.compile(re.escape(escaped_val), re.IGNORECASE)
+
+
+def render_narrative(text: str, context: dict | None = None) -> None:
+    """Render a narrative in a theme-aware box.
+
+    - Real user values from the form are highlighted green.
+    - [AGENCY TO PROVIDE: ...] placeholders are highlighted amber.
+    - A legend explains both colours.
+    """
     safe = html.escape(text)
-    # Highlight [AGENCY TO PROVIDE: ...] placeholders
-    safe = re.sub(
-        r"(\[AGENCY TO PROVIDE:[^\]]*\])",
-        r"<mark>\1</mark>",
-        safe,
-    )
-    # Convert paragraph breaks and single newlines to HTML
+
+    # --- Green highlights: real values the user supplied ---
+    if context:
+        # Collect escaped values, longest first so a longer match is never
+        # stolen by a shorter substring (e.g. "Valley" before "Valley Rural Transit").
+        candidates = []
+        for key in _HIGHLIGHT_FACT_KEYS:
+            value = context.get(key, "")
+            if (
+                value
+                and not value.startswith("[AGENCY TO PROVIDE:")
+                and len(value) >= _min_len_for(value)
+            ):
+                candidates.append(html.escape(value))
+        candidates.sort(key=len, reverse=True)
+
+        for escaped_val in candidates:
+            pattern = _make_highlight_pattern(escaped_val)
+            safe = pattern.sub(
+                lambda m: f"<span class='user-data'>{m.group(0)}</span>",
+                safe,
+            )
+
+    # --- Paragraph formatting ---
     paragraphs = safe.split("\n\n")
     inner = "".join(
         f"<p>{p.replace(chr(10), '<br>')}</p>"
         for p in paragraphs
         if p.strip()
     )
-    st.markdown(f"<div class='narrative-box'>{inner}</div>", unsafe_allow_html=True)
+
+    has_user_data = bool(context and any(
+        context.get(k, "") and len(context.get(k, "")) >= _min_len_for(context.get(k, ""))
+        for k in _HIGHLIGHT_FACT_KEYS
+    ))
+
+    legend_html = (
+        "<div class='narrative-legend'>"
+        "<span><span class='legend-swatch' "
+        "style='background:rgba(34,197,94,0.35)'></span>Your agency data</span>"
+        "</div>"
+        if has_user_data else ""
+    )
+
+    st.markdown(
+        f"<div class='narrative-box'>{inner}</div>{legend_html}",
+        unsafe_allow_html=True,
+    )
 
 # ---------------------------------------------------------------------------
 # Session state helpers
@@ -147,21 +233,22 @@ st.divider()
 if st.session_state.step == "profile":
     st.subheader("Step 1 — Tell us about your agency")
     st.info(
-        "Fill in what you know. Every field is optional — any field you leave blank "
-        "will appear as a placeholder in the narrative draft for your team to complete.",
+        "Fill in the required fields (marked \\*) and any optional details you have. "
+        "Optional fields left blank will be omitted from the narrative draft.",
         icon="ℹ️",
     )
 
     with st.form("profile_form"):
+        st.caption("Fields marked with \\* are required.")
         st.markdown("**Agency basics**")
         agency_name = st.text_input(
-            "Agency name",
+            "Agency name *",
             placeholder="e.g. Valley Rural Transit",
         )
         col1, col2 = st.columns(2)
         with col1:
             state = st.selectbox(
-                "State",
+                "State *",
                 options=[""] + sorted([
                     "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
                     "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
@@ -173,7 +260,7 @@ if st.session_state.step == "profile":
             )
         with col2:
             area_type = st.selectbox(
-                "Service area type",
+                "Service area type *",
                 options=["", "rural", "small_urban", "urban"],
                 format_func=lambda x: "Select area type..." if x == "" else x.replace("_", "-"),
             )
@@ -181,29 +268,41 @@ if st.session_state.step == "profile":
         st.markdown("**Agency size**")
         col3, col4, col5 = st.columns(3)
         with col3:
-            annual_ridership = st.text_input(
-                "Annual ridership",
-                placeholder="e.g. 45,000",
+            annual_ridership_raw = st.number_input(
+                "Annual ridership *",
+                min_value=0,
+                step=1,
+                value=None,
+                placeholder="e.g. 45000",
+                help="Whole number — total annual passenger trips.",
             )
         with col4:
-            fleet_size = st.text_input(
-                "Fleet size (vehicles)",
+            fleet_size_raw = st.number_input(
+                "Fleet size (vehicles) *",
+                min_value=0,
+                step=1,
+                value=None,
                 placeholder="e.g. 12",
+                help="Total number of revenue vehicles.",
             )
         with col5:
-            staff_count = st.text_input(
-                "Number of staff",
+            staff_count_raw = st.number_input(
+                "Number of staff *",
+                min_value=0,
+                step=1,
+                value=None,
                 placeholder="e.g. 8",
+                help="Full-time equivalent employees.",
             )
 
         st.markdown("**Project**")
         project_type = st.selectbox(
-            "What type of project are you seeking funding for?",
+            "What type of project are you seeking funding for? *",
             options=["", "AI Training", "AI Pilot", "Automation / Software", "Other"],
             format_func=lambda x: "Select project type..." if x == "" else x,
         )
         project_description = st.text_area(
-            "Brief project description",
+            'Brief project description (required when "Other" is selected above)',
             placeholder=(
                 "e.g. Implement AI-assisted scheduling software to improve on-demand "
                 "service efficiency in our rural service area."
@@ -228,13 +327,51 @@ if st.session_state.step == "profile":
         submitted = st.form_submit_button("Find matching grants →", type="primary")
 
     if submitted:
+        # --- Validate required fields ---
+        form_errors = []
+        if not agency_name.strip():
+            form_errors.append("**Agency name** is required.")
+        elif not re.fullmatch(r"[A-Za-z\s]+", agency_name.strip()):
+            form_errors.append("**Agency name** may only contain letters and spaces.")
+        if not state:
+            form_errors.append("**State** is required.")
+        if not area_type:
+            form_errors.append("**Service area type** is required.")
+        if not project_type:
+            form_errors.append("**Project type** is required.")
+        if project_type == "Other" and not project_description.strip():
+            form_errors.append(
+                "**Brief project description** is required when \"Other\" is selected as project type."
+            )
+
+        # --- Validate required numeric fields ---
+        if annual_ridership_raw is None or annual_ridership_raw <= 0:
+            form_errors.append("**Annual ridership** is required and must be greater than 0.")
+        if fleet_size_raw is None or fleet_size_raw <= 0:
+            form_errors.append("**Fleet size** is required and must be greater than 0.")
+        if staff_count_raw is None or staff_count_raw <= 0:
+            form_errors.append("**Number of staff** is required and must be greater than 0.")
+
+        if form_errors:
+            st.error(
+                "Please fill in the following before continuing:\n\n"
+                + "\n".join(f"- {e}" for e in form_errors),
+                icon="🚫",
+            )
+            st.stop()
+
+        # Format numeric fields as locale-style strings for the narrative
+        # (e.g. 45000 → "45,000") so the highlight regex finds them in the text.
+        def _fmt_int(v):
+            return f"{int(v):,}" if v is not None else None
+
         st.session_state.profile = {
             "agency_name": agency_name or None,
             "state": state or None,
             "area_type": area_type or None,
-            "annual_ridership": annual_ridership or None,
-            "fleet_size": fleet_size or None,
-            "staff_count": staff_count or None,
+            "annual_ridership": _fmt_int(annual_ridership_raw),
+            "fleet_size": _fmt_int(fleet_size_raw),
+            "staff_count": _fmt_int(staff_count_raw),
             "project_type": project_type or None,
             "project_description": project_description or None,
             "prior_grants": prior_grants or None,
@@ -314,24 +451,23 @@ elif st.session_state.step == "draft":
 
     st.subheader(f"Step 3 — Draft narrative for {grant.name}")
 
-    # Build safe context and show any missing facts
+    # Build safe context (only fields the agency actually provided)
     context = build_context(profile)
     missing = list_missing_facts(context)
 
     if missing:
-        st.warning(
-            f"**{len(missing)} field(s) not provided.** "
-            "The draft will include placeholders for these — your team will need to fill them in:\n\n"
-            + "\n".join(f"- {fact}" for fact in missing),
-            icon="📝",
+        st.info(
+            f"**{len(missing)} field(s) were left blank** and will not appear in the draft: "
+            + ", ".join(missing) + ".",
+            icon="ℹ️",
         )
     else:
-        st.success("All agency facts are available. The draft will use your real data.", icon="✅")
+        st.success("All agency facts provided — the draft will use your real data.", icon="✅")
 
     # Show existing draft or generate
     if st.session_state.narrative:
         st.markdown("### Draft narrative")
-        render_narrative(st.session_state.narrative)
+        render_narrative(st.session_state.narrative, context)
 
         if st.session_state.draft_meta.get("cache_hit"):
             st.caption("⚡ System prompt served from cache — faster response.")
@@ -348,8 +484,8 @@ elif st.session_state.step == "draft":
 
     else:
         st.markdown(
-            "Click **Generate draft** to call Claude. "
-            "The narrative will use your agency information above and never invent facts."
+            "Click **Generate draft** to let AI do it's magic. "
+            "The narrative will use your agency information your provided erlier."
         )
         col_gen, col_back = st.columns([1, 1])
         with col_gen:
@@ -384,13 +520,12 @@ elif st.session_state.step == "export":
 
     st.subheader("Step 4 — Export your draft")
     st.success(
-        "Your draft is ready to download. Review it carefully and fill in all "
-        "`[AGENCY TO PROVIDE: ...]` placeholders before using it in an application.",
+        "Your draft is ready to download. Review it carefully before using it in an application.",
         icon="✅",
     )
 
     st.markdown("### Draft preview")
-    render_narrative(narrative)
+    render_narrative(narrative, build_context(profile))
 
     st.divider()
     st.markdown("### Download")
@@ -415,9 +550,9 @@ elif st.session_state.step == "export":
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         )
 
-    st.caption(
-        "This tool stops here. Nothing has been submitted. "
-        "All exports are local — no data leaves your machine except the Claude API call."
+    st.markdown(
+        "<div style='text-align:center'><strong>End of draft generation.</strong></div>",
+        unsafe_allow_html=True,
     )
 
     st.divider()
